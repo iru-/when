@@ -1,0 +1,59 @@
+#! /usr/bin/env nop
+\ SPDX-License-Identifier: MIT
+\ Copyright (c) 2021 Iruatã Martins dos Santos Souza
+
+fload clib
+
+( inotify support )
+library:
+0 1 Cfunction: inotify_init inotify_init
+3 1 Cfunction: inotify_add_watch inotify_add_watch
+
+record:
+   4 field: inotify-event-wd
+   4 field: inotify-event-mask
+   4 field: inotify-event-cookie
+   4 field: inotify-event-len
+   0 field: inotify-event-name
+value /inotify-event
+
+2 value IN_MODIFY
+
+( fork support )
+0 1 Cfunction: fork fork
+2 1 Cfunction: execvp execvp
+
+( application )
+-1 value fd
+-1 value wd
+/inotify-event ( NAME_MAX + ) value #event
+create event #event allot
+
+: usage
+   " usage: " type  0 arg type  "  file command" println
+   1 sysexit ;
+
+: ?add-watch ( fd path mask -> wd )
+   inotify_add_watch  dup -1 = " can't add watch" ?abort ;
+
+: init ( -> fd )
+   #args 3 < if usage then
+   inotify_init  dup -1 = " can't initialize inotify" ?abort
+   dup to fd
+   next-arg drop  \ arg is a zstr, discard length
+   IN_MODIFY ?add-watch to wd ;   
+
+: child
+   arg-offset @ arg drop     \ file
+   arg-offset @ cells args + \ argv
+   execvp ;
+
+: exec
+   fork if exit then
+   child " can't exec" println bye ;
+
+: run
+   event #event fd sysread  0 <= if exit then
+   exec run ;
+
+init run
